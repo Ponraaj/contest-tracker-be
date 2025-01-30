@@ -33,3 +33,9 @@ model ContestParticipation {
   @@index([contestId])
   @@index([studentsId])
 }
+
+model Contest{
+  id String @id @default(uuid())
+  name String
+  date DateTime
+}
