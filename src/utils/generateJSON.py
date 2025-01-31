@@ -1,14 +1,16 @@
-from datetime import datetime, timedelta
 import json
-from typing import TypedDict, List
+from datetime import datetime, timedelta
+from typing import List, TypedDict
+
 import pytz
+
 
 class Contest(TypedDict):
     contest: str
     date: str
     type: str
 
-def generate_contests(start_weekly: str, start_biweekly: str, years: int = 2) -> List[Contest]:
+def generate_contests(start_weekly: str, start_biweekly: str, years: int = 100) -> List[Contest]:
     """
     Generate a schedule of LeetCode contests with proper UTC timestamps.
     
