@@ -17,25 +17,31 @@ model Students {
   batch       String
   section     String
   rating      BigInt
-  college     String                 @default("'CIT'")
+  college     String                 @default("CIT")
   contest     ContestParticipation[]
 }
 
 model ContestParticipation {
-  id         String   @id @default(uuid())
-  studentsId  String
-  contestId  String
-  rank       Int @default(0)
-  created_at DateTime @default(now())
+  id          String   @id @default(uuid())
+  studentId   String
+  contestId   String
+  contestName String
+  rank        Int      @default(0)
+  finishTime  String
+  total_qns   Int
+  questions   Json
+  created_at  DateTime @default(now())
 
-  Students Students? @relation(fields: [studentsId], references: [id])
+  Students Students? @relation(fields: [studentId], references: [id])
+  Contest  Contest?  @relation(fields: [contestId], references: [id])
 
   @@index([contestId])
-  @@index([studentsId])
+  @@index([studentId])
 }
 
-model Contest{
-  id String @id @default(uuid())
-  name String
-  date DateTime
+model Contest {
+  id           String                 @id @default(uuid())
+  name         String
+  date         DateTime
+  participants ContestParticipation[]
 }

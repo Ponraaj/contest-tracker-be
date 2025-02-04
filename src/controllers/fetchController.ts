@@ -1,6 +1,23 @@
 import { getFirstContest } from "./contestController";
+import prisma from "../config/db";
 
 export let base_url = "https://leetcode.cn/contest/api/ranking";
+
+export interface Question {
+  question_id: String;
+  time_taken: String;
+  wrong_submissions: Number;
+  submission_time: String;
+  submission_id: String;
+}
+
+export interface Participant {
+  username: String;
+  rank: Number;
+  finish_time: String;
+  total_questions: Number;
+  questions: Question[];
+}
 
 //NOTE: Get updated URL
 export async function getupdatedURL(base_url: String) {
@@ -51,13 +68,12 @@ export async function fetchPage(pageIndex: Number, attempt = 1) {
       return fetchPage(pageIndex, attempt + 1); // Retry fetching
     } else {
       console.error(`Failed to fetch page ${pageIndex} after 3 attempts.`);
-      return null; // Return null after max retries
+      return null;
     }
   }
 }
 
 // TODO: 1. fix time taken for each problem
-// TODO: 2. Check the students directly here itself
 export async function fetchLeaderBoard() {
   try {
     const current_url: String | Error = await getupdatedURL(base_url);
@@ -68,15 +84,9 @@ export async function fetchLeaderBoard() {
         "Error fetching the leaderboard due to issues with finding the total pages in the leaderboard",
       );
 
-    let structuredData: any[] = []; // Store structured leaderboard data
+    let data: Participant[] = [];
 
-    // Fetch the contest start time once (assume it’s the same for all users)
-    const contestStartTime = await getFirstContest().then((res) => res?.date);
-    if (!contestStartTime)
-      throw new Error("Could not retrieve contest start time.");
-
-    //@ts-ignore
-    const contestStartDate = new Date(contestStartTime * 1000).getTime(); // Convert to milliseconds
+    const contestStartDate = await getFirstContest().then((res) => res?.date);
 
     for (let i = 1; i <= totalPages; i++) {
       const data = await fetchPage(i);
@@ -86,25 +96,25 @@ export async function fetchLeaderBoard() {
 
         for (let index = 0; index < submissions.length; index++) {
           const submissionSet = submissions[index];
-          const user = total_rank[index]; // Directly match user to submissions
+          const user = total_rank[index];
 
           let questions = Object.values(submissionSet).map(
             (submission: any) => {
-              const submissionTime = new Date(submission.date * 1000).getTime(); // Convert to milliseconds
-              const timeTaken = Math.max(submissionTime - contestStartDate, 0); // Prevent negative time
+              const submissionTime = new Date(submission.date * 1000).getTime();
+              //@ts-ignore
+              const timeTaken = Math.max(submissionTime - contestStartDate, 0);
 
-              const hours = Math.floor(timeTaken / 3600000); // Hours
-              const minutes = Math.floor((timeTaken % 3600000) / 60000); // Minutes
-              const seconds = Math.floor((timeTaken % 60000) / 1000); // Seconds
+              const hours = Math.floor(timeTaken / 3600000);
+              const minutes = Math.floor((timeTaken % 3600000) / 60000);
+              const seconds = Math.floor((timeTaken % 60000) / 1000);
 
-              // Format time as HH:MM:SS
               const formattedTime = `${hours.toString().padStart(2, "0")}:${minutes
                 .toString()
                 .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 
               return {
                 question_id: submission.question_id,
-                time_taken: formattedTime, // Time formatted as HH:MM:SS
+                time_taken: formattedTime,
                 wrong_submissions: submission.fail_count,
                 submission_time: submission.date,
                 submission_id: submission.submission_id,
@@ -112,7 +122,7 @@ export async function fetchLeaderBoard() {
             },
           );
 
-          structuredData.push({
+          data.push({
             username: user.username,
             rank: user.rank,
             finish_time: new Date(user.finish_time * 1000).toLocaleTimeString(
@@ -126,9 +136,56 @@ export async function fetchLeaderBoard() {
       }
     }
 
-    return structuredData; // Return structured leaderboard data
+    return data;
   } catch (error) {
-    console.error("Error fetching leaderboard:", error);
+    console.log("Error fetching leaderboard:", error);
     return [];
+  }
+}
+
+//NOTE: Load the data into the DB
+export async function insertToDB() {
+  try {
+    const data = await fetchLeaderBoard();
+
+    const contestDetails = await getFirstContest();
+    if (!contestDetails?.contest || !contestDetails?.date) {
+      console.log("Contest details missing.");
+      return;
+    }
+
+    const contest = await prisma.contest.findFirst({
+      where: { name: contestDetails.contest },
+    });
+
+    if (!contest) {
+      console.error(`Contest ${contestDetails.contest} not found in DB.`);
+      return;
+    }
+
+    for (const entry of data) {
+      const student = await prisma.students.findUnique({
+        where: { leetcode_id: entry.username },
+      });
+
+      if (student) {
+        await prisma.contestParticipation.create({
+          data: {
+            studentId: student.id,
+            contestId: contest.id,
+            contestName: contestDetails.contest,
+            rank: entry.rank,
+            finishTime: entry.finish_time,
+            total_qns: entry.total_questions,
+            questions: entry.questions as any,
+          },
+        });
+        console.log(`Inserted data for ${entry.username}`);
+      } else {
+        console.log(`Student ${entry.username} not found in DB, skipping.`);
+      }
+    }
+  } catch (error) {
+    console.log("Error inserting contest data:", error);
   }
 }
