@@ -1,17 +1,12 @@
 import fs from "fs/promises";
 import path from "path";
-import { z } from "zod";
 
-const CONTESTS_FILE_PATH = path.join(process.cwd(), "utils", "contests.json");
-
-// Zod Schema for validating contest data
-const contestSchema = z.object({
-  contest: z.string(),
-  date: z.string().datetime(),
-  type: z.enum(["weekly", "biweekly"]),
-});
-
-const contestArraySchema = z.array(contestSchema);
+const CONTESTS_FILE_PATH = path.join(
+  process.cwd(),
+  "src",
+  "utils",
+  "contests.json",
+);
 
 /**
  * Reads and validates contests from the JSON file.
@@ -20,15 +15,7 @@ async function readContests() {
   try {
     const data = await fs.readFile(CONTESTS_FILE_PATH, "utf-8");
     const contests = JSON.parse(data);
-
-    // Validate contests using Zod
-    const validationResult = contestArraySchema.safeParse(contests);
-    if (!validationResult.success) {
-      console.error("Invalid contest data format:", validationResult.error);
-      return [];
-    }
-
-    return validationResult.data;
+    return contests;
   } catch (error) {
     console.error("Error reading contests file:", error);
     return [];
@@ -66,4 +53,3 @@ export async function removeFirstContest() {
     console.error("Error removing first contest:", error);
   }
 }
-

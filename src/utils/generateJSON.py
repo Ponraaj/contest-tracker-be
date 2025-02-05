@@ -31,10 +31,10 @@ def generate_contests(start_weekly: str, start_biweekly: str, years: int = 100) 
     
     # Parse input dates
     current_weekly = datetime.strptime(start_weekly, "%d/%m/%Y")
-    current_weekly = ist.localize(current_weekly.replace(hour=10, minute=0))  # 10:00 AM IST
+    current_weekly = ist.localize(current_weekly.replace(hour=8, minute=0))  # 8:00 AM IST
     
     current_biweekly = datetime.strptime(start_biweekly, "%d/%m/%Y")
-    current_biweekly = ist.localize(current_biweekly.replace(hour=22, minute=0))  # 10:00 PM IST
+    current_biweekly = ist.localize(current_biweekly.replace(hour=20, minute=0))  # 8:00 PM IST
     
     # Calculate end date
     end_date = current_weekly.replace(year=current_weekly.year + years)

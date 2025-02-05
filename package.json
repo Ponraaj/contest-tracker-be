@@ -14,13 +14,15 @@
     "schema": "src/prisma/schema.prisma"
   },
   "dependencies": {
-    "@prisma/client": "^6.3.0",
+    "@prisma/client": "^6.3.1",
     "@types/express": "^5.0.0",
     "@types/node-schedule": "^2.1.7",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "node-schedule": "^2.1.1",
-    "prisma": "^6.3.0",
-    "zod": "^3.24.1"
+    "ioredis": "^5.4.2",
+    "node-schedule": "^2.1.1"
+  },
+  "devDependencies": {
+    "prisma": "^6.3.1"
   }
 }

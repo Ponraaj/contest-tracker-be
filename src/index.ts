@@ -1,14 +1,8 @@
-import {  initializeScheduler } from './controllers/contestController';
+import { insertToDB } from "./controllers/fetchController";
+import { removeFirstContest } from "./controllers/contestController";
 
-
-// Initialize the scheduler when the module is imported
-initializeScheduler();
-
-// If you need to handle errors at the top level
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+console.log("Process started !!");
+insertToDB().then(async () => {
+  console.log("DONE !!");
+  console.log("Removing the first contest frm JSON");
 });

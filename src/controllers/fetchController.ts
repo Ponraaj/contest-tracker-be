@@ -1,21 +1,23 @@
+import Redis from "ioredis";
 import { getFirstContest } from "./contestController";
 import prisma from "../config/db";
 
-export let base_url = "https://leetcode.cn/contest/api/ranking";
+export let base_url = "https://leetcode.cn/contest/api/ranking/";
+const redis = new Redis();
 
 export interface Question {
-  question_id: String;
-  time_taken: String;
-  wrong_submissions: Number;
-  submission_time: String;
-  submission_id: String;
+  question_id: string;
+  time_taken: string;
+  wrong_submissions: number;
+  submission_time: string;
+  submission_id: string;
 }
 
 export interface Participant {
-  username: String;
-  rank: Number;
-  finish_time: String;
-  total_questions: Number;
+  username: string;
+  rank: number;
+  finish_time: string;
+  total_questions: number;
   questions: Question[];
 }
 
@@ -38,7 +40,12 @@ export async function getConstestPages(current_url: String | Error) {
       throw new Error("Invalid current_url");
     }
 
-    const response = await fetch(`${current_url}?pagination=1`);
+    const response = await fetch(`${current_url}?pagination=1`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "application/json",
+      },
+    });
     const cntdata = await response.json();
     const userCount = cntdata.user_num;
     const totalPages = Math.ceil(userCount / 25);
@@ -51,13 +58,23 @@ export async function getConstestPages(current_url: String | Error) {
 }
 
 //NOTE: Get the data from single page
-export async function fetchPage(pageIndex: Number, attempt = 1) {
+export async function fetchPage(
+  pageIndex: Number,
+  current_url: String | Error,
+  attempt = 1,
+) {
   try {
     console.log(`Started fetching data for page ${pageIndex}`);
-    const response = await fetch(`${base_url}?pagination=${pageIndex}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
+    console.log(`Fetching URL:  ${current_url}?pagination=${pageIndex}`);
+    const response = await fetch(`${current_url}?pagination=${pageIndex}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0",
+        Accept: "application/json",
+      },
+    });
+    // if (!response.ok) {
+    //   throw new Error(`HTTP error! Status: ${response.status}`);
+    // }
     const data = await response.json();
     console.log(`Completed fetching data for page ${pageIndex}`);
     return data;
@@ -65,7 +82,7 @@ export async function fetchPage(pageIndex: Number, attempt = 1) {
     console.error(`Error fetching data for page ${pageIndex}:`, error);
     if (attempt < 3) {
       console.log(`Retrying page ${pageIndex} (attempt ${attempt + 1})...`);
-      return fetchPage(pageIndex, attempt + 1); // Retry fetching
+      return fetchPage(pageIndex, current_url, attempt + 1); // Retry fetching
     } else {
       console.error(`Failed to fetch page ${pageIndex} after 3 attempts.`);
       return null;
@@ -79,17 +96,23 @@ export async function fetchLeaderBoard() {
     const current_url: String | Error = await getupdatedURL(base_url);
     const totalPages: number | Error = await getConstestPages(current_url);
 
+    console.log("Current URL: ", current_url);
+
     if (typeof totalPages !== "number")
       throw new Error(
         "Error fetching the leaderboard due to issues with finding the total pages in the leaderboard",
       );
 
-    let data: Participant[] = [];
+    let userdata: Participant[] = [];
 
-    const contestStartDate = await getFirstContest().then((res) => res?.date);
+    const contestDate = await getFirstContest().then((res) => {
+      return res?.date;
+    });
+
+    const contestStartTime = new Date(contestDate).getTime();
 
     for (let i = 1; i <= totalPages; i++) {
-      const data = await fetchPage(i);
+      const data = await fetchPage(i, current_url);
 
       if (data) {
         const { submissions, total_rank } = data;
@@ -100,9 +123,8 @@ export async function fetchLeaderBoard() {
 
           let questions = Object.values(submissionSet).map(
             (submission: any) => {
-              const submissionTime = new Date(submission.date * 1000).getTime();
-              //@ts-ignore
-              const timeTaken = Math.max(submissionTime - contestStartDate, 0);
+              const submissionTime = submission.date * 1000;
+              const timeTaken = Math.max(submissionTime - contestStartTime, 0);
 
               const hours = Math.floor(timeTaken / 3600000);
               const minutes = Math.floor((timeTaken % 3600000) / 60000);
@@ -122,7 +144,7 @@ export async function fetchLeaderBoard() {
             },
           );
 
-          data.push({
+          userdata.push({
             username: user.username,
             rank: user.rank,
             finish_time: new Date(user.finish_time * 1000).toLocaleTimeString(
@@ -135,57 +157,100 @@ export async function fetchLeaderBoard() {
         }
       }
     }
-
-    return data;
+    return userdata;
   } catch (error) {
     console.log("Error fetching leaderboard:", error);
     return [];
   }
 }
 
+//NOTE: Cache the leaderboard
+async function fetchCachedLeaderboard() {
+  const cacheKey = "leaderboard_data";
+  const cachedData = await redis.get(cacheKey);
+
+  if (cachedData) {
+    console.log("Using cached leaderboard data.");
+    return JSON.parse(cachedData);
+  }
+
+  console.log("Fetching new leaderboard data...");
+  const data = await fetchLeaderBoard();
+  await redis.setex(cacheKey, 2 * 60 * 60, JSON.stringify(data)); // Cache for 2 hour
+  return data;
+}
+
 //NOTE: Load the data into the DB
 export async function insertToDB() {
-  try {
-    const data = await fetchLeaderBoard();
+  {
+    try {
+      const data = await fetchCachedLeaderboard();
+      const contestDetails = await getFirstContest();
 
-    const contestDetails = await getFirstContest();
-    if (!contestDetails?.contest || !contestDetails?.date) {
-      console.log("Contest details missing.");
-      return;
-    }
+      if (!contestDetails?.contest || !contestDetails?.date) {
+        console.log("Contest details missing.");
+        return;
+      }
 
-    const contest = await prisma.contest.findFirst({
-      where: { name: contestDetails.contest },
-    });
-
-    if (!contest) {
-      console.error(`Contest ${contestDetails.contest} not found in DB.`);
-      return;
-    }
-
-    for (const entry of data) {
-      const student = await prisma.students.findUnique({
-        where: { leetcode_id: entry.username },
+      // Upsert contest details
+      const contest = await prisma.contest.upsert({
+        where: { name: contestDetails.contest },
+        update: {},
+        create: {
+          name: contestDetails.contest,
+          date: contestDetails.date,
+        },
       });
 
-      if (student) {
-        await prisma.contestParticipation.create({
-          data: {
-            studentId: student.id,
-            contestId: contest.id,
-            contestName: contestDetails.contest,
-            rank: entry.rank,
-            finishTime: entry.finish_time,
-            total_qns: entry.total_questions,
-            questions: entry.questions as any,
-          },
-        });
-        console.log(`Inserted data for ${entry.username}`);
-      } else {
-        console.log(`Student ${entry.username} not found in DB, skipping.`);
+      // Create a Map for quick lookup (username -> entry)
+      const leaderboardMap = new Map<string, any>();
+      for (const entry of data) {
+        leaderboardMap.set(entry.username, entry);
       }
+
+      // Fetch all students
+      const students = await prisma.students.findMany();
+
+      // Iterate over students and check if they are in the leaderboard
+      for (const student of students) {
+        const entry = leaderboardMap.get(student.leetcode_id);
+
+        if (entry) {
+          await prisma.contestParticipation.upsert({
+            where: {
+              studentId_contestId: {
+                studentId: student.id,
+                contestId: contest.id,
+              },
+            },
+            update: {
+              rank: entry.rank,
+              finishTime: entry.finish_time,
+              total_qns: entry.total_questions,
+              questions: entry.questions as any,
+            },
+            create: {
+              studentId: student.id,
+              contestId: contest.id,
+              contestName: contestDetails.contest,
+              rank: entry.rank,
+              finishTime: entry.finish_time,
+              total_qns: entry.total_questions,
+              questions: entry.questions as any,
+            },
+          });
+
+          console.log(
+            `Updated participation for student: ${student.leetcode_id}`,
+          );
+        } else {
+          console.log(
+            `Student ${student.leetcode_id} did not participate, skipping.`,
+          );
+        }
+      }
+    } catch (error) {
+      console.log("Error updating contest participation:", error);
     }
-  } catch (error) {
-    console.log("Error inserting contest data:", error);
   }
 }

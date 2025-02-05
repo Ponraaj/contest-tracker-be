@@ -27,21 +27,22 @@ model ContestParticipation {
   contestId   String
   contestName String
   rank        Int      @default(0)
-  finishTime  String
-  total_qns   Int
-  questions   Json
+  finishTime  String?
+  total_qns   Int?
+  questions   Json?
   created_at  DateTime @default(now())
 
   Students Students? @relation(fields: [studentId], references: [id])
   Contest  Contest?  @relation(fields: [contestId], references: [id])
 
+  @@unique([studentId, contestId])
   @@index([contestId])
   @@index([studentId])
 }
 
 model Contest {
   id           String                 @id @default(uuid())
-  name         String
+  name         String                 @unique
   date         DateTime
   participants ContestParticipation[]
 }
