@@ -23,7 +23,7 @@ def generate_contests(start_weekly: str, start_biweekly: str, years: int = 100) 
         List[Contest]: List of contest dictionaries with name, ISO date, and type
     """
     contests: List[Contest] = []
-    weekly_number = 436  # Starting weekly contest number
+    weekly_number = 435  # Starting weekly contest number
     biweekly_number = 149  # Starting biweekly contest number
     
     # Create timezone-aware datetime objects
