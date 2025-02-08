@@ -1,21 +1,16 @@
-version: '3.8'
+version: "3.8"
 
 services:
   server:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
-    environment:
-      - NODE_ENV=production
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - DATABASE_URL=postgresql://postgres.klfsmztyukswxkqynouv:Leetcode_1234@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
-      - DIRECT_URL=postgresql://postgres.klfsmztyukswxkqynouv:Leetcode_1234@aws-0-ap-south-1.pooler.supabase.com:5432/postgres
+    env_file:
+      - .env
     ports:
       - 6969:6969
     volumes:
       - ./src/utils:/usr/src/app/src/utils
-      - .env:/usr/src/app/.env  # Mount .env file
     depends_on:
       - redis
     restart: unless-stopped
@@ -30,3 +25,4 @@ services:
 
 volumes:
   redis-data:
+

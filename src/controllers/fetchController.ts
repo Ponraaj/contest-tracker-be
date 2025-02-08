@@ -4,8 +4,8 @@ import prisma from "../config/db";
 
 export let base_url = "https://leetcode.cn/contest/api/ranking/";
 const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+  host: process.env.REDIS_HOST || "localhost",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
   maxRetriesPerRequest: 3,
   retryStrategy(times) {
     const delay = Math.min(times * 50, 2000);
@@ -256,7 +256,6 @@ export async function insertToDB() {
           console.log(
             `Student ${student.leetcode_id} did not participate, skipping.`,
           );
-          
         }
       }
     } catch (error) {
