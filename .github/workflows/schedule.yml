@@ -32,8 +32,10 @@ jobs:
 
               echo "Scheduling '$NAME' to run at $EXECUTION_TIME"
 
-              # Trigger run_scrapper.yml at EXECUTION_TIME
-              gh workflow run run_scrapper.yml --ref main -f contest_name="$NAME" -f execution_time="$EXECUTION_TIME"
+          curl -X POST -H "Accept: application/vnd.github.v3+json" \
+                   -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
+                   https://api.github.com/repos/Ponraaj/contest-tracker-be/actions/workflows/run_scrapper.yml/dispatches \
+                   -d "{\"ref\":\"master\", \"inputs\": {\"contest_name\": \"$NAME\", \"execution_time\": \"$EXECUTION_TIME\"}}"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
