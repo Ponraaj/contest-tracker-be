@@ -1,0 +1,32 @@
+name: Run Scrapper
+
+on:
+  workflow_dispatch:
+    inputs:
+      contest_name:
+        description: "Contest Name"
+        required: true
+      execution_time:
+        description: "Scheduled Execution Time"
+        required: true
+
+jobs:
+  run-contest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker
+        run: |
+          docker --version
+
+      - name: Run Docker container for contest
+        run: |
+          echo "Running contest: ${{ github.event.inputs.contest_name }} at $(date)"
+          docker-compose up --force-recreate --remove-orphans
+
+      - name: Stop and clean up
+        run: |
+          docker-compose down
