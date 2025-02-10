@@ -25,7 +25,7 @@ jobs:
 
               # Convert start time to UNIX timestamp
               START_TIMESTAMP=$(date -d "$START_TIME" +%s)
-              EXECUTION_TIMESTAMP=$((START_TIMESTAMP + 3 * 3600 + ))
+              EXECUTION_TIMESTAMP=$((START_TIMESTAMP + 3 * 3600 + 30 * 60 ))
 
               # Convert to ISO 8601 format for GitHub Actions scheduling
               EXECUTION_TIME=$(date -d "@$EXECUTION_TIMESTAMP" --utc +"%Y-%m-%dT%H:%M:%SZ")
