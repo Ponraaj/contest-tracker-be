@@ -1,0 +1,39 @@
+name: Reschedule Contests on JSON Update
+
+on:
+  push:
+    paths:
+      - "src/utils/contests.json" # Only trigger if this file changes
+  workflow_dispatch: # Allows manual execution
+
+jobs:
+  schedule-contests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read contest data & Schedule Runs
+        run: |
+          sudo apt-get install jq -y  # Ensure jq is installed
+
+          # Read JSON and schedule GitHub Actions
+          jq -c '.[]' src/utils/contests.json | while read -r contest; do
+              NAME=$(echo "$contest" | jq -r '.contest')
+              START_TIME=$(echo "$contest" | jq -r '.date')
+
+              # Convert start time to UNIX timestamp
+              START_TIMESTAMP=$(date -d "$START_TIME" +%s)
+              EXECUTION_TIMESTAMP=$((START_TIMESTAMP + 3 * 3600 + ))
+
+              # Convert to ISO 8601 format for GitHub Actions scheduling
+              EXECUTION_TIME=$(date -d "@$EXECUTION_TIMESTAMP" --utc +"%Y-%m-%dT%H:%M:%SZ")
+
+              echo "Scheduling '$NAME' to run at $EXECUTION_TIME"
+
+              # Trigger run_scrapper.yml at EXECUTION_TIME
+              gh workflow run run_scrapper.yml --ref main -f contest_name="$NAME" -f execution_time="$EXECUTION_TIME"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
