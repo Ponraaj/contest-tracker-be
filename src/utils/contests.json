@@ -1,20 +1,5 @@
 [
   {
-    "contest": "biweekly-contest-149",
-    "date": "2025-02-01T20:00:00+05:30",
-    "type": "biweekly"
-  },
-  {
-    "contest": "weekly-contest-435",
-    "date": "2025-02-02T08:00:00+05:30",
-    "type": "weekly"
-  },
-  {
-    "contest": "weekly-contest-436",
-    "date": "2025-02-09T08:00:00+05:30",
-    "type": "weekly"
-  },
-  {
     "contest": "biweekly-contest-150",
     "date": "2025-02-15T20:00:00+05:30",
     "type": "biweekly"
@@ -39135,3 +39120,4 @@
     "type": "weekly"
   }
 ]
+
