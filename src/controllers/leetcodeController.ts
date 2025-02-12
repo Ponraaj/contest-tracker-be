@@ -1,18 +1,7 @@
 import Redis from "ioredis";
-import { getFirstContest } from "./contestController";
 import prisma from "../config/db";
-
-export let base_url = "https://leetcode.cn/contest/api/ranking/";
-const redis = new Redis({
-  host: process.env.REDIS_HOST || "localhost",
-  port: parseInt(process.env.REDIS_PORT || "6379"),
-  maxRetriesPerRequest: 3,
-  retryStrategy(times) {
-    const delay = Math.min(times * 50, 2000);
-    console.log(`Retrying Redis connection... Attempt ${times}`);
-    return delay;
-  },
-});
+import fs from "fs/promises";
+import path from "path";
 
 export interface Question {
   question_id: string;
@@ -29,6 +18,71 @@ export interface Participant {
   total_questions: number;
   questions: Question[];
 }
+
+const CONTESTS_FILE_PATH = path.join(
+  process.cwd(),
+  "src",
+  "utils",
+  "contests.json",
+);
+
+/**
+ * Reads and validates contests from the JSON file.
+ */
+async function readContests() {
+  try {
+    const data = await fs.readFile(CONTESTS_FILE_PATH, "utf-8");
+    const contests = JSON.parse(data);
+    return contests;
+  } catch (error) {
+    console.error("Error reading contests file:", error);
+    return [];
+  }
+}
+
+/**
+ * Gets the first contest from the JSON file (if available).
+ */
+export async function getFirstContest() {
+  const contests = await readContests();
+  return contests.length > 0 ? contests[0] : null;
+}
+
+/**
+ * Removes the first contest from the JSON file.
+ */
+export async function removeFirstContest() {
+  try {
+    const contests = await readContests();
+    if (contests.length === 0) {
+      console.log("No contests to remove.");
+      return;
+    }
+
+    const updatedContests = contests.slice(1);
+    await fs.writeFile(
+      CONTESTS_FILE_PATH,
+      JSON.stringify(updatedContests, null, 2),
+      "utf-8",
+    );
+
+    console.log(`Removed contest: ${contests[0].contest}`);
+  } catch (error) {
+    console.error("Error removing first contest:", error);
+  }
+}
+
+export let base_url = "https://leetcode.cn/contest/api/ranking/";
+const redis = new Redis({
+  host: process.env.REDIS_HOST || "localhost",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+  maxRetriesPerRequest: 3,
+  retryStrategy(times) {
+    const delay = Math.min(times * 50, 2000);
+    console.log(`Retrying Redis connection... Attempt ${times}`);
+    return delay;
+  },
+});
 
 //NOTE: Get updated URL
 export async function getupdatedURL(base_url: String) {
@@ -99,7 +153,6 @@ export async function fetchPage(
   }
 }
 
-// TODO: 1. fix time taken for each problem
 export async function fetchLeaderBoard() {
   try {
     const current_url: String | Error = await getupdatedURL(base_url);

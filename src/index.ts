@@ -1,5 +1,7 @@
-import { insertToDB } from "./controllers/fetchController";
-import { removeFirstContest } from "./controllers/contestController";
+import { insertToDB } from "./controllers/leetcodeController";
+import { removeFirstContest } from "./controllers/leetcodeController";
+
+//NOTE: Contest ah remove pannala
 
 console.log("Process started !!");
 insertToDB().then(async () => {
