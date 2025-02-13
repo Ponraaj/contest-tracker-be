@@ -1,10 +1,13 @@
-import { insertToDB } from "./controllers/leetcodeController";
+import { updateCodechefParticipation } from "./controllers/codechefController";
 import { removeFirstContest } from "./controllers/leetcodeController";
 
-//NOTE: Contest ah remove pannala
-
 console.log("Process started !!");
-insertToDB().then(async () => {
-  console.log("DONE !!");
-  console.log("Removing the first contest frm JSON");
-});
+updateCodechefParticipation()
+  .then((results) => {
+    console.log("Response:", {
+      message: "CodeChef participation update completed",
+      results
+    });
+    console.log("DONE !!");
+  })
+  .catch((error) => console.error("Error:", error));
