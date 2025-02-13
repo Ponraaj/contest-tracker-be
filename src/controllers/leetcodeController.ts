@@ -255,9 +255,11 @@ export async function insertToDB() {
       }
 
       // Upsert contest details
+      
       const contest = await prisma.contest.upsert({
         where: { name: contestDetails.contest },
         update: {},
+        //@ts-ignore
         create: {
           name: contestDetails.contest,
           date: contestDetails.date,
