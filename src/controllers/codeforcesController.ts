@@ -60,7 +60,6 @@ interface CodeforcesSubmissionResponse {
 }
 
 export const updateCodeforcesParticipation = async (): Promise<UpdateResults> => {
-  // Fetch all students
   const students = await prisma.students.findMany();
   const results = {
     success: [] as string[],
@@ -120,47 +119,67 @@ export const updateSingleStudentCodeforces = async (studentId: string): Promise<
 async function updateStudentCodeforcesData(student: any) {
   const { default: got } = await import('got');
 
-  // Fetch contest history
+  // Fetch all past contests
+  const contestsResponse = await got(
+    "https://codeforces.com/api/contest.list"
+  ).json<{ status: string; result: { id: number; name: string; phase: string; startTimeSeconds: number }[] }>();
+
+  if (!contestsResponse.result.length) {
+    throw new Error("No contest data found");
+  }
+
+  // Find the last ended contest
+  const pastContests = contestsResponse.result
+    .filter(contest => contest.phase === "FINISHED")
+    .sort((a, b) => b.startTimeSeconds - a.startTimeSeconds);
+
+  if (!pastContests.length) {
+    throw new Error("No finished contests found");
+  }
+
+  const lastEndedContest = pastContests[0];
+
+  // Fetch user's contest history
   const ratingResponse = await got(
     `https://codeforces.com/api/user.rating?handle=${student.codeforces_id}`
   ).json<CodeforcesRatingResponse>();
 
-  if (!ratingResponse.result.length) {
-    throw new Error("No contest data found");
-  }
-
-  const contests = ratingResponse.result;
-  const latestContest = contests[contests.length - 1];
-
-  // Fetch submission history for the latest contest
-  const submissionResponse = await got(
-    `https://codeforces.com/api/user.status?handle=${student.codeforces_id}&from=1&count=1000`
-  ).json<CodeforcesSubmissionResponse>();
-
-  if (!submissionResponse.result.length) {
-    throw new Error("No submissions found");
-  }
-
-  const submissions = submissionResponse.result;
-  const latestContestSubmissions = submissions.filter(
-    (sub) => sub.contestId === latestContest.contestId
+  // Check if user participated in the last ended contest
+  const userContest = ratingResponse.result.find(
+    contest => contest.contestId === lastEndedContest.id
   );
 
-  // Get solved problems (unique problems with OK verdict)
-  const solvedProblems = latestContestSubmissions
-    .filter((sub) => sub.verdict === "OK")
-    .map((sub) => sub.problem.name)
-    .filter((value: string, index: number, self: string[]) => 
-      self.indexOf(value) === index
-    );
+  let rank = -1;
+  let solvedProblems: string[] = [];
+
+  if (userContest) {
+    // Fetch submission history
+    const submissionResponse = await got(
+      `https://codeforces.com/api/user.status?handle=${student.codeforces_id}&from=1&count=1000`
+    ).json<CodeforcesSubmissionResponse>();
+
+    if (submissionResponse.result.length) {
+      const latestContestSubmissions = submissionResponse.result.filter(
+        sub => sub.contestId === lastEndedContest.id
+      );
+
+      // Get unique solved problems
+      solvedProblems = latestContestSubmissions
+        .filter(sub => sub.verdict === "OK")
+        .map(sub => sub.problem.name)
+        .filter((value, index, self) => self.indexOf(value) === index);
+    }
+
+    rank = userContest.rank;
+  }
 
   // Create or update contest record
   const contest_record = await prisma.contest.upsert({
-    where: { name: latestContest.contestName },
+    where: { name: lastEndedContest.name },
     update: {},
     create: {
-      name: latestContest.contestName,
-      date: new Date(latestContest.ratingUpdateTimeSeconds * 1000),
+      name: lastEndedContest.name,
+      date: new Date(lastEndedContest.startTimeSeconds * 1000),
       type: "Codeforces",
     },
   });
@@ -174,25 +193,32 @@ async function updateStudentCodeforcesData(student: any) {
       },
     },
     update: {
-      rank: latestContest.rank,
-      finishTime: new Date(latestContest.ratingUpdateTimeSeconds * 1000).toISOString(),
+      rank,
+      finishTime: new Date(lastEndedContest.startTimeSeconds * 1000).toISOString(),
       total_qns: solvedProblems.length,
       questions: solvedProblems,
     },
     create: {
       studentId: student.id,
       contestId: contest_record.id,
-      contestName: latestContest.contestName,
-      rank: latestContest.rank,
-      finishTime: new Date(latestContest.ratingUpdateTimeSeconds * 1000).toISOString(),
+      contestName: lastEndedContest.name,
+      rank,
+      finishTime: new Date(lastEndedContest.startTimeSeconds * 1000).toISOString(),
       total_qns: solvedProblems.length,
       questions: solvedProblems,
     },
   });
 
+  // Find latest contest where the user participated
+  const latestUserContest = ratingResponse.result.length 
+    ? ratingResponse.result[ratingResponse.result.length - 1]
+    : null;
+
   // Update student's rating
-  await prisma.students.update({
-    where: { id: student.id },
-    data: { codeforces_rating: BigInt(latestContest.newRating) },
-  });
+  if (latestUserContest) {
+    await prisma.students.update({
+      where: { id: student.id },
+      data: { codeforces_rating: BigInt(latestUserContest.newRating) },
+    });
+  }
 }
