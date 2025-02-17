@@ -1,5 +1,5 @@
-import { updateCodechefParticipation } from "./controllers/codechefController";
-import { removeFirstContest } from "./controllers/leetcodeController";
+import { updateCodechefParticipation } from "./controllers/codechefController.js";
+import { updateCodeforcesParticipation } from "./controllers/codeforcesController";
 
 console.log("Process started !!");
 updateCodechefParticipation()
