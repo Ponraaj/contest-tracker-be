@@ -95,6 +95,7 @@ model Contest {
   name                    String                    @unique
   date                    DateTime
   type                    ContestType
+  pending                 Boolean                   @default(false)
   participants            ContestParticipation[]
   CodechefParticipation   CodechefParticipation[]
   CodeforcesParticipation CodeforcesParticipation[]
