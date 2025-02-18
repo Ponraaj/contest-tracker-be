@@ -243,7 +243,7 @@ async function fetchCachedLeaderboard() {
 }
 
 //NOTE: Load the data into the DB
-export async function insertToDB() {
+export async function updateLeetcodeData() {
   {
     try {
       const data = await fetchCachedLeaderboard();
@@ -255,7 +255,7 @@ export async function insertToDB() {
       }
 
       // Upsert contest details
-      
+
       const contest = await prisma.contest.upsert({
         where: { name: contestDetails.contest },
         update: {},
