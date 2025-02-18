@@ -9,7 +9,7 @@ interface UpdateResults {
   failureCount: number;
 }
 
-export const updateCodechefParticipation = async (): Promise<UpdateResults> => {
+export const updateCodechefdata = async (): Promise<UpdateResults> => {
   // Fetch all students
   const students = await prisma.students.findMany();
   const results = {
@@ -17,7 +17,7 @@ export const updateCodechefParticipation = async (): Promise<UpdateResults> => {
     failed: [] as string[],
     total: students.length,
     successCount: 0,
-    failureCount: 0
+    failureCount: 0,
   };
 
   for (const student of students) {
@@ -37,7 +37,9 @@ export const updateCodechefParticipation = async (): Promise<UpdateResults> => {
   return results;
 };
 
-export const updateSingleStudentCodechef = async (studentId: string): Promise<{
+export const updateSingleStudentCodechef = async (
+  studentId: string,
+): Promise<{
   message: string;
   student?: string;
   error?: string;
@@ -83,13 +85,14 @@ async function updateStudentCodechefData(student: any) {
   const lastContest = cleanText($(".problems-solved .content").last().text());
   const contestPattern = /(Starters \d+.*?)(?=Starters \d+|$)/g;
   const contest = lastContest.match(contestPattern);
-  const problemsSolved = contest?.[0]
-    ?.split(/(?<=\))\s*/)
-    .slice(1)
-    .join("")
-    .split(", ")
-    .map(cleanText)
-    .filter(Boolean) || [];
+  const problemsSolved =
+    contest?.[0]
+      ?.split(/(?<=\))\s*/)
+      .slice(1)
+      .join("")
+      .split(", ")
+      .map(cleanText)
+      .filter(Boolean) || [];
 
   // Create or update contest record
   const contest_record = await prisma.contest.upsert({
@@ -131,3 +134,4 @@ async function updateStudentCodechefData(student: any) {
     data: { codechef_rating: BigInt(response.currentRating) },
   });
 }
+

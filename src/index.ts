@@ -1,7 +1,4 @@
-import { updateCodechefParticipation } from "./controllers/codechefController";
-import { updateCodeforcesParticipation } from "./controllers/codeforcesController";
 import { fetchUpcomingContests } from "./controllers/fetchController";
-import { removeFirstContest } from "./controllers/leetcodeController.js";
 import schedule from "node-schedule";
 
 async function updateAllPlatforms() {
@@ -10,7 +7,7 @@ async function updateAllPlatforms() {
     // Run daily at midnight IST
     schedule.scheduleJob(
       { rule: "0 0 * * *", tz: "Asia/Kolkata" },
-      fetchUpcomingContests
+      fetchUpcomingContests,
     );
 
     // Run initial fetch when the script starts

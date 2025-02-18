@@ -1,4 +1,7 @@
 import schedule from "node-schedule";
+import { updateCodeforcesdata } from "./codeforcesController";
+import { updateLeetcodeData, removeFirstContest } from "./leetcodeController";
+import { updateCodechefdata } from "./codechefController";
 
 interface Contest {
   site: "leetcode" | "codechef" | "codeforces";
@@ -13,17 +16,17 @@ const CONTESTS_API = "https://competeapi.vercel.app/contests/upcoming";
 
 async function handleLeetcodeContest(contest: Contest) {
   console.log(`Processing Leetcode contest: ${contest.title}`);
-  // Add your Leetcode-specific logic here
+  await updateLeetcodeData().then(() => removeFirstContest());
 }
 
 async function handleCodechefContest(contest: Contest) {
   console.log(`Processing Codechef contest: ${contest.title}`);
-  // Add your Codechef-specific logic here
+  await updateCodechefdata();
 }
 
 async function handleCodeforcesContest(contest: Contest) {
   console.log(`Processing Codeforces contest: ${contest.title}`);
-  // Add your Codeforces-specific logic here
+  await updateCodeforcesdata();
 }
 
 export async function fetchUpcomingContests() {
@@ -37,7 +40,7 @@ export async function fetchUpcomingContests() {
     const todayContests = response.filter((contest) => {
       const startDate = new Date(contest.startTime).toLocaleDateString(
         "en-IN",
-        { timeZone: "Asia/Kolkata" }
+        { timeZone: "Asia/Kolkata" },
       );
       return startDate === todayIST;
     });
@@ -64,13 +67,13 @@ function scheduleContestFetch(contest: Contest) {
       break;
     default:
       console.warn(
-        `Unknown platform ${contest.site}, using default 8 hour offset`
+        `Unknown platform ${contest.site}, using default 8 hour offset`,
       );
       offsetHours = 8;
   }
 
   const fetchTimeIST = new Date(
-    new Date(contest.endTime).getTime() + offsetHours * 60 * 60 * 1000
+    new Date(contest.endTime).getTime() + offsetHours * 60 * 60 * 1000,
   );
 
   // Schedule the job using the Date object directly
@@ -80,7 +83,7 @@ function scheduleContestFetch(contest: Contest) {
   });
 
   console.log(
-    `Scheduled processing for "${contest.title}" at ${fetchTimeIST} (IST)`
+    `Scheduled processing for "${contest.title}" at ${fetchTimeIST} (IST)`,
   );
 }
 
