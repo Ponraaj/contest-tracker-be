@@ -10,7 +10,6 @@ interface UpdateResults {
 }
 
 export const updateCodechefdata = async (): Promise<UpdateResults> => {
-  // Fetch all students
   const students = await prisma.students.findMany();
   const results = {
     success: [] as string[],
@@ -84,7 +83,7 @@ async function updateStudentCodechefData(student: any) {
 
   let contestName = "Unknown Contest";
   let contestDate = new Date();
-  let rank = -1; // Default rank if no contest was attended
+  let rank = -1;
   let problemsSolved: string[] = [];
 
   if (latestContestData) {
