@@ -20,7 +20,7 @@ FROM base AS deps
 
 COPY src/prisma/schema.prisma ./src/prisma/schema.prisma
 
-# Download dependencies as a separate step to take advantage of Docker's caching.
+# Download dependencies as a separate step to take advantage of Docker's cachinkkkg.
 RUN --mount=type=bind,source=package.json,target=package.json \
     --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
     --mount=type=cache,target=/root/.local/share/pnpm/store \
