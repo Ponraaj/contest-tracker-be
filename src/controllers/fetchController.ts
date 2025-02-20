@@ -1,4 +1,5 @@
 import schedule from "node-schedule";
+import Queue from "bull";
 import { updateCodeforcesdata } from "./codeforcesController";
 import { updateLeetcodeData, removeFirstContest } from "./leetcodeController";
 import { updateCodechefdata } from "./codechefController";
@@ -14,19 +15,44 @@ interface Contest {
 
 const CONTESTS_API = "https://competeapi.vercel.app/contests/upcoming";
 
+const redisConfig = {
+  host: process.env.REDIS_HOST || "localhost",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+  maxRetriesPerRequest: 3,
+  retryStrategy(times: number) {
+    const delay = Math.min(times * 50, 2000);
+    console.log(`Retrying Redis connection... Attempt ${times}`);
+    return delay;
+  },
+};
+
+const queue = new Queue("ContestQueue", {
+  redis: redisConfig,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 1000,
+    },
+    removeOnComplete: true,
+  },
+});
+
+queue.add({ type: "Leetcode" });
+
 async function handleLeetcodeContest(contest: Contest) {
-  console.log(`Processing Leetcode contest: ${contest.title}`);
-  await updateLeetcodeData().then(() => removeFirstContest());
+  console.log(`Adding to Queue Leetcode contest: ${contest.title}`);
+  await queue.add({ type: "Leetcode" });
 }
 
 async function handleCodechefContest(contest: Contest) {
-  console.log(`Processing Codechef contest: ${contest.title}`);
-  await updateCodechefdata();
+  console.log(`Adding to Queue Codechef contest: ${contest.title}`);
+  await queue.add({ type: "Codechef" });
 }
 
 async function handleCodeforcesContest(contest: Contest) {
-  console.log(`Processing Codeforces contest: ${contest.title}`);
-  await updateCodeforcesdata();
+  console.log(`Adding to Queue Codeforces contest: ${contest.title}`);
+  await queue.add({ type: "Codeforces" });
 }
 
 export async function fetchUpcomingContests() {
@@ -76,8 +102,7 @@ function scheduleContestFetch(contest: Contest) {
     new Date(contest.endTime).getTime() + offsetHours * 60 * 60 * 1000,
   );
 
-  // Schedule the job using the Date object directly
-  const job = schedule.scheduleJob(fetchTimeIST, async () => {
+  schedule.scheduleJob(fetchTimeIST, async () => {
     console.log(`Processing contest: ${contest.title} at ${fetchTimeIST}`);
     await processContest(contest);
   });
@@ -106,3 +131,34 @@ async function processContest(contest: Contest) {
     console.error(`Error processing contest ${contest.title}:`, error);
   }
 }
+
+queue.process(async (job, done) => {
+  try {
+    console.log(`Processing job: ${job.data.type}`);
+
+    switch (job.data.type) {
+      case "Leetcode":
+        await updateLeetcodeData();
+        await removeFirstContest();
+        break;
+      case "Codechef":
+        await updateCodechefdata();
+        break;
+      case "Codeforces":
+        await updateCodeforcesdata();
+        break;
+      default:
+        console.warn(`Unknown job: ${job.data.type}`);
+    }
+
+    done();
+  } catch (error) {
+    console.error(`Error processing job: ${job.data.type}\n`, error);
+    done(error as Error);
+  }
+});
+
+process.on("SIGTERM", async () => {
+  queue.close();
+  process.exit(0);
+});
