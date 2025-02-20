@@ -1,4 +1,3 @@
-import Redis from "ioredis";
 import prisma from "../config/db";
 import fs from "fs/promises";
 import path from "path";
@@ -73,16 +72,6 @@ export async function removeFirstContest() {
 }
 
 export let base_url = "https://leetcode.cn/contest/api/ranking/";
-const redis = new Redis({
-  host: process.env.REDIS_HOST || "localhost",
-  port: parseInt(process.env.REDIS_PORT || "6379"),
-  maxRetriesPerRequest: 3,
-  retryStrategy(times) {
-    const delay = Math.min(times * 50, 2000);
-    console.log(`Retrying Redis connection... Attempt ${times}`);
-    return delay;
-  },
-});
 
 //NOTE: Get updated URL
 export async function getupdatedURL(base_url: String) {
@@ -226,27 +215,11 @@ export async function fetchLeaderBoard() {
   }
 }
 
-//NOTE: Cache the leaderboard
-async function fetchCachedLeaderboard() {
-  const cacheKey = "leaderboard_data";
-  const cachedData = await redis.get(cacheKey);
-
-  if (cachedData) {
-    console.log("Using cached leaderboard data.");
-    return JSON.parse(cachedData);
-  }
-
-  console.log("Fetching new leaderboard data...");
-  const data = await fetchLeaderBoard();
-  await redis.setex(cacheKey, 2 * 60 * 60, JSON.stringify(data)); // Cache for 2 hour
-  return data;
-}
-
 //NOTE: Load the data into the DB
 export async function updateLeetcodeData() {
   {
     try {
-      const data = await fetchCachedLeaderboard();
+      const data = await fetchLeaderBoard();
       const contestDetails = await getFirstContest();
 
       if (!contestDetails?.contest || !contestDetails?.date) {
@@ -263,6 +236,7 @@ export async function updateLeetcodeData() {
         create: {
           name: contestDetails.contest,
           date: contestDetails.date,
+          type: "Leetcode",
         },
       });
 
