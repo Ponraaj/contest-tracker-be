@@ -38,8 +38,6 @@ const queue = new Queue("ContestQueue", {
   },
 });
 
-queue.add({ type: "Leetcode" });
-
 async function handleLeetcodeContest(contest: Contest) {
   console.log(`Adding to Queue Leetcode contest: ${contest.title}`);
   await queue.add({ type: "Leetcode" });
