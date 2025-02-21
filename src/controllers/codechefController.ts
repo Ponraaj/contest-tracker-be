@@ -1,5 +1,5 @@
-import * as cheerio from "cheerio";
-import prisma from "../config/db";
+import * as cheerio from 'cheerio';
+import prisma from '../config/db';
 
 interface UpdateResults {
   success: string[];
@@ -37,7 +37,7 @@ export const updateCodechefdata = async (): Promise<UpdateResults> => {
 };
 
 export const updateSingleStudentCodechef = async (
-  studentId: string,
+  studentId: string
 ): Promise<{ message: string; student?: string; error?: string }> => {
   try {
     const student = await prisma.students.findUnique({
@@ -45,27 +45,27 @@ export const updateSingleStudentCodechef = async (
     });
 
     if (!student) {
-      throw new Error("Student not found");
+      throw new Error('Student not found');
     }
 
     await updateStudentCodechefData(student);
 
     return {
-      message: "Successfully updated CodeChef participation",
+      message: 'Successfully updated CodeChef participation',
       student: student.codechef_id,
     };
   } catch (error) {
     console.error(`Failed to update data for student ${studentId}:`, error);
     return {
-      message: "Error updating CodeChef participation",
-      error: error instanceof Error ? error.message : "Unknown error",
+      message: 'Error updating CodeChef participation',
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 };
 
 // Helper function to update a single student's CodeChef data
 async function updateStudentCodechefData(student: any) {
-  const { default: got } = await import("got");
+  const { default: got } = await import('got');
   const url = `https://www.codechef.com/users/${student.codechef_id}`;
   const html = await got(url).text();
   const $ = cheerio.load(html);
@@ -73,7 +73,7 @@ async function updateStudentCodechefData(student: any) {
   const apiUrl = `https://codechef-api.vercel.app/handle/${student.codechef_id}`;
   const response = await got(apiUrl).json<any>();
 
-  const cleanText = (text: string) => text.replace(/\s+/g, " ").trim();
+  const cleanText = (text: string) => text.replace(/\s+/g, ' ').trim();
 
   // Fetch the latest contest attended by the user
   const latestContestData =
@@ -81,7 +81,7 @@ async function updateStudentCodechefData(student: any) {
       ? response.ratingData[response.ratingData.length - 1]
       : null;
 
-  let contestName = "Unknown Contest";
+  let contestName = 'Unknown Contest';
   let contestDate = new Date();
   let rank = -1;
   let problemsSolved: string[] = [];
@@ -93,7 +93,7 @@ async function updateStudentCodechefData(student: any) {
   }
 
   // Get problems solved (if available)
-  const lastContest = cleanText($(".problems-solved .content").last().text());
+  const lastContest = cleanText($('.problems-solved .content').last().text());
   const contestPattern = /(Starters \d+.*?)(?=Starters \d+|$)/g;
   const contest = lastContest.match(contestPattern);
 
@@ -101,8 +101,8 @@ async function updateStudentCodechefData(student: any) {
     contest?.[0]
       ?.split(/(?<=\))\s*/)
       .slice(1)
-      .join("")
-      .split(", ")
+      .join('')
+      .split(', ')
       .map(cleanText)
       .filter(Boolean) || [];
 
@@ -113,7 +113,7 @@ async function updateStudentCodechefData(student: any) {
     create: {
       name: contestName,
       date: contestDate,
-      type: "Codechef",
+      type: 'Codechef',
     },
   });
 
@@ -141,7 +141,9 @@ async function updateStudentCodechefData(student: any) {
   });
 
   // Update student's CodeChef rating
-  const newRating = response.currentRating ? BigInt(response.currentRating) : BigInt(0);
+  const newRating = response.currentRating
+    ? BigInt(response.currentRating)
+    : BigInt(0);
   await prisma.students.update({
     where: { id: student.id },
     data: { codechef_rating: newRating },
