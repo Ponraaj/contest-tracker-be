@@ -1,4 +1,4 @@
-import prisma from "../config/db";
+import prisma from '../config/db';
 
 interface UpdateResults {
   success: string[];
@@ -77,7 +77,7 @@ export const updateCodeforcesdata = async (): Promise<UpdateResults> => {
     } catch (error) {
       console.error(
         `Failed to update data for ${student.codeforces_id}:`,
-        error,
+        error
       );
       results.failed.push(student.codeforces_id);
     }
@@ -90,7 +90,7 @@ export const updateCodeforcesdata = async (): Promise<UpdateResults> => {
 };
 
 export const updateSingleStudentCodeforces = async (
-  studentId: string,
+  studentId: string
 ): Promise<{
   message: string;
   student?: string;
@@ -102,31 +102,31 @@ export const updateSingleStudentCodeforces = async (
     });
 
     if (!student) {
-      throw new Error("Student not found");
+      throw new Error('Student not found');
     }
 
     await updateStudentCodeforcesData(student);
 
     return {
-      message: "Successfully updated Codeforces participation",
+      message: 'Successfully updated Codeforces participation',
       student: student.codeforces_id,
     };
   } catch (error) {
     console.error(`Failed to update data for student ${studentId}:`, error);
     return {
-      message: "Error updating Codeforces participation",
-      error: error instanceof Error ? error.message : "Unknown error",
+      message: 'Error updating Codeforces participation',
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 };
 
 // Helper function to update a single student's Codeforces data
 async function updateStudentCodeforcesData(student: any) {
-  const { default: got } = await import("got");
+  const { default: got } = await import('got');
 
   // Fetch all past contests
   const contestsResponse = await got(
-    "https://codeforces.com/api/contest.list",
+    'https://codeforces.com/api/contest.list'
   ).json<{
     status: string;
     result: {
@@ -138,28 +138,28 @@ async function updateStudentCodeforcesData(student: any) {
   }>();
 
   if (!contestsResponse.result.length) {
-    throw new Error("No contest data found");
+    throw new Error('No contest data found');
   }
 
   // Find the last ended contest
   const pastContests = contestsResponse.result
-    .filter((contest) => contest.phase === "FINISHED")
+    .filter((contest) => contest.phase === 'FINISHED')
     .sort((a, b) => b.startTimeSeconds - a.startTimeSeconds);
 
   if (!pastContests.length) {
-    throw new Error("No finished contests found");
+    throw new Error('No finished contests found');
   }
 
   const lastEndedContest = pastContests[0];
 
   // Fetch user's contest history
   const ratingResponse = await got(
-    `https://codeforces.com/api/user.rating?handle=${student.codeforces_id}`,
+    `https://codeforces.com/api/user.rating?handle=${student.codeforces_id}`
   ).json<CodeforcesRatingResponse>();
 
   // Check if user participated in the last ended contest
   const userContest = ratingResponse.result.find(
-    (contest) => contest.contestId === lastEndedContest.id,
+    (contest) => contest.contestId === lastEndedContest.id
   );
 
   let rank = -1;
@@ -168,17 +168,17 @@ async function updateStudentCodeforcesData(student: any) {
   if (userContest) {
     // Fetch submission history
     const submissionResponse = await got(
-      `https://codeforces.com/api/user.status?handle=${student.codeforces_id}&from=1&count=1000`,
+      `https://codeforces.com/api/user.status?handle=${student.codeforces_id}&from=1&count=1000`
     ).json<CodeforcesSubmissionResponse>();
 
     if (submissionResponse.result.length) {
       const latestContestSubmissions = submissionResponse.result.filter(
-        (sub) => sub.contestId === lastEndedContest.id,
+        (sub) => sub.contestId === lastEndedContest.id
       );
 
       // Get unique solved problems
       solvedProblems = latestContestSubmissions
-        .filter((sub) => sub.verdict === "OK")
+        .filter((sub) => sub.verdict === 'OK')
         .map((sub) => sub.problem.name)
         .filter((value, index, self) => self.indexOf(value) === index);
     }
@@ -193,7 +193,7 @@ async function updateStudentCodeforcesData(student: any) {
     create: {
       name: lastEndedContest.name,
       date: new Date(lastEndedContest.startTimeSeconds * 1000),
-      type: "Codeforces",
+      type: 'Codeforces',
     },
   });
 
@@ -208,7 +208,7 @@ async function updateStudentCodeforcesData(student: any) {
     update: {
       rank,
       finishTime: new Date(
-        lastEndedContest.startTimeSeconds * 1000,
+        lastEndedContest.startTimeSeconds * 1000
       ).toISOString(),
       total_qns: solvedProblems.length,
       questions: solvedProblems,
@@ -219,7 +219,7 @@ async function updateStudentCodeforcesData(student: any) {
       contestName: lastEndedContest.name,
       rank,
       finishTime: new Date(
-        lastEndedContest.startTimeSeconds * 1000,
+        lastEndedContest.startTimeSeconds * 1000
       ).toISOString(),
       total_qns: solvedProblems.length,
       questions: solvedProblems,
