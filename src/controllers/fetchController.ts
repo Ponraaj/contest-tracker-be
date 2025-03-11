@@ -1,5 +1,6 @@
 import schedule from 'node-schedule'
 import Queue from 'bull'
+import axios from 'axios'
 import { updateCodeforcesdata } from './codeforcesController'
 import { updateLeetcodeData, removeFirstContest } from './leetcodeController'
 import { updateCodechefdata } from './codechefController'
@@ -13,7 +14,42 @@ interface Contest {
   url: string
 }
 
-const CONTESTS_API = 'https://competeapi.vercel.app/contests/upcoming'
+interface CodechefContest {
+  contest_name: string
+  contest_start_date: string
+  contest_duration: number
+  contest_code: string
+}
+
+interface CodeforcesContest {
+  name: string
+  id: number
+  phase: string
+  startTimeSeconds: number
+  durationSeconds: number
+}
+
+interface LeetcodeContest {
+  title: string
+  startTime: number
+  duration: number
+  titleSlug: string
+  cardImg: string
+}
+
+interface LeetcodeResponse {
+  data: {
+    topTwoContests: LeetcodeContest[]
+  }
+}
+
+interface CodeforcesResponse {
+  result: CodeforcesContest[]
+}
+
+interface CodechefResponse {
+  future_contests: CodechefContest[]
+}
 
 const redisConfig = {
   host: process.env.REDIS_HOST || 'localhost',
@@ -38,30 +74,137 @@ const queue = new Queue('ContestQueue', {
   },
 })
 
-async function handleLeetcodeContest(contest: Contest) {
+async function handleLeetcodeContest(contest: Contest): Promise<void> {
   console.log(`Adding to Queue Leetcode contest: ${contest.title}`)
   await queue.add({ type: 'Leetcode' })
 }
 
-async function handleCodechefContest(contest: Contest) {
+async function handleCodechefContest(contest: Contest): Promise<void> {
   console.log(`Adding to Queue Codechef contest: ${contest.title}`)
   await queue.add({ type: 'Codechef' })
 }
 
-async function handleCodeforcesContest(contest: Contest) {
+async function handleCodeforcesContest(contest: Contest): Promise<void> {
   console.log(`Adding to Queue Codeforces contest: ${contest.title}`)
   await queue.add({ type: 'Codeforces' })
 }
 
-export async function fetchUpcomingContests() {
+const parseCodechef = (data: CodechefContest[]): Contest[] => {
+  return data.map((item) => {
+    const startTime = new Date(item.contest_start_date).getTime()
+    const duration = item.contest_duration * 60 * 1000
+
+    return {
+      site: 'codechef' as const,
+      title: item.contest_name,
+      startTime,
+      duration,
+      endTime: startTime + duration,
+      url: `https://www.codechef.com/${item.contest_code}`,
+    }
+  })
+}
+
+const parseCodeforces = (data: CodeforcesContest[]): Contest[] => {
+  return data
+    .filter((item) => item.phase !== 'FINISHED')
+    .map((item) => {
+      const startTime = item.startTimeSeconds * 1000
+      const duration = item.durationSeconds * 1000
+
+      return {
+        site: 'codeforces' as const,
+        title: item.name,
+        startTime,
+        duration,
+        endTime: startTime + duration,
+        url: `https://codeforces.com/contest/${item.id}`,
+      }
+    })
+}
+
+const parseLeetcode = (data: LeetcodeContest[]): Contest[] => {
+  return data.map((item) => {
+    const startTime = item.startTime * 1000
+    const duration = item.duration * 60 * 1000
+
+    return {
+      site: 'leetcode' as const,
+      title: item.title,
+      startTime,
+      duration,
+      endTime: startTime + duration,
+      url: `https://leetcode.com/contest/${item.titleSlug}`,
+    }
+  })
+}
+
+export async function fetchUpcomingContests(): Promise<Contest[]> {
   try {
-    const { default: got } = await import('got')
-    const response = await got(CONTESTS_API).json<Contest[]>()
+    let contests: Contest[] = []
+
+    try {
+      const codechefResponse = await axios.post<CodechefResponse>(
+        'https://www.codechef.com/api/list/contests/all?sort_by=START&sorting_order=asc&offset=0&mode=all',
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      )
+      contests = contests.concat(
+        parseCodechef(codechefResponse.data.future_contests),
+      )
+    } catch (error) {
+      console.error('Error fetching Codechef contests:', error)
+    }
+
+    try {
+      const leetcodeResponse = await axios.post<LeetcodeResponse>(
+        'https://leetcode.com/graphql',
+        {
+          query: `{
+            topTwoContests{
+              title
+              startTime
+              duration
+              cardImg
+              titleSlug
+            }
+          }`,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      )
+      contests = contests.concat(
+        parseLeetcode(leetcodeResponse.data.data.topTwoContests),
+      )
+    } catch (error) {
+      console.error('Error fetching Leetcode contests:', error)
+    }
+
+    try {
+      const codeforcesResponse = await axios.get<CodeforcesResponse>(
+        'https://codeforces.com/api/contest.list',
+      )
+      contests = contests.concat(
+        parseCodeforces(codeforcesResponse.data.result),
+      )
+    } catch (error) {
+      console.error('Error fetching Codeforces contests:', error)
+    }
+
+    contests.sort((a, b) => a.startTime - b.startTime)
+
     const todayIST = new Date().toLocaleDateString('en-IN', {
       timeZone: 'Asia/Kolkata',
     })
 
-    const todayContests = response.filter((contest) => {
+    const todayContests = contests.filter((contest) => {
       const startDate = new Date(contest.startTime).toLocaleDateString(
         'en-IN',
         { timeZone: 'Asia/Kolkata' },
@@ -74,12 +217,14 @@ export async function fetchUpcomingContests() {
     }
 
     console.log(`Scheduled ${todayContests.length} contests for processing.`)
+    return contests
   } catch (error) {
-    console.error('Error fetching contests:', error)
+    console.error('Error in fetchUpcomingContests:', error)
+    return []
   }
 }
 
-function scheduleContestFetch(contest: Contest) {
+function scheduleContestFetch(contest: Contest): void {
   let offsetHours: number
   switch (contest.site.toLowerCase()) {
     case 'leetcode':
@@ -110,7 +255,7 @@ function scheduleContestFetch(contest: Contest) {
   )
 }
 
-async function processContest(contest: Contest) {
+async function processContest(contest: Contest): Promise<void> {
   try {
     switch (contest.site.toLowerCase()) {
       case 'leetcode':
@@ -157,6 +302,6 @@ queue.process(async (job, done) => {
 })
 
 process.on('SIGTERM', async () => {
-  queue.close()
+  await queue.close()
   process.exit(0)
 })
