@@ -282,8 +282,32 @@ export async function updateLeetcodeData() {
             `Updated participation for student: ${student.leetcode_id}`,
           )
         } else {
+            await prisma.contestParticipation.upsert({
+            where: {
+              studentId_contestId: {
+                studentId: student.id,
+                contestId: contest.id,
+              },
+            },
+            update: {
+              rank: -1,
+              finishTime: null,
+              total_qns: 0,
+              questions: [] as any,
+            },
+            create: {
+              studentId: student.id,
+              contestId: contest.id,
+              contestName: contestDetails.contest,
+              rank: -1,
+              finishTime: null,
+              total_qns: 0,
+              questions: [] as any,
+            },
+          })
+  
           console.log(
-            `Student ${student.leetcode_id} did not participate, skipping.`,
+            `Marked student ${student.leetcode_id} as non-participant with rank -1`,
           )
         }
       }
