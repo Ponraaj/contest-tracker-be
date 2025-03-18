@@ -10,7 +10,7 @@ datasource db {
 }
 
 model Students {
-  id                      String                    @id @default(uuid())
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   created_at              DateTime?                 @default(now()) @db.Timestamptz(6)
   name                    String
   leetcode_id             String                    @unique
@@ -19,10 +19,11 @@ model Students {
   dept                    String
   batch                   String
   section                 String
-  leetcode_rating         BigInt
-  codechef_rating         BigInt
-  codeforces_rating       BigInt
+  leetcode_rating         BigInt                    @default(-1)
+  codechef_rating         BigInt                    @default(-1)
+  codeforces_rating       BigInt                    @default(-1)
   college                 String                    @default("CIT")
+  reg_no                  String                    @unique @default("")
   contest                 ContestParticipation[]
   CodechefParticipation   CodechefParticipation[]
   CodeforcesParticipation CodeforcesParticipation[]
