@@ -10,6 +10,10 @@ FROM node:${NODE_VERSION}-alpine AS base
 # Set working directory for all build stages.
 WORKDIR /usr/src/app
 
+# Install timezone data and set timezone to IST
+RUN apk add --no-cache tzdata
+ENV TZ=Asia/Kolkata
+
 # Install pnpm.
 RUN --mount=type=cache,target=/root/.npm \
   npm install -g pnpm@${PNPM_VERSION}
@@ -20,7 +24,7 @@ FROM base AS deps
 
 COPY src/prisma/schema.prisma ./src/prisma/schema.prisma
 
-# Download dependencies as a separate step to take advantage of Docker's cachinkkkg.
+# Download dependencies as a separate step to take advantage of Docker's caching.
 RUN --mount=type=bind,source=package.json,target=package.json \
   --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
   --mount=type=cache,target=/root/.local/share/pnpm/store \
