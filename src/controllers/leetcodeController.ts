@@ -74,10 +74,14 @@ export async function removeFirstContest() {
 export const base_url = 'https://leetcode.cn/contest/api/ranking/'
 
 //NOTE: Get updated URL
-export async function getupdatedURL(base_url: string) {
+export async function getupdatedURL(base_url: string, contestName?: string) {
   try {
-    const contestName = await getFirstContest()
-    if (contestName?.contest) base_url += contestName?.contest
+    if (contestName) {
+      return base_url + contestName
+    }
+
+    const contestInfo = await getFirstContest()
+    if (contestInfo?.contest) base_url += contestInfo.contest
     return base_url
   } catch (error) {
     console.log('Error getting the updated URL', error)
@@ -88,7 +92,7 @@ export async function getupdatedURL(base_url: string) {
 //NOTE: Get total no. of pages in the leaderboard
 export async function getConstestPages(current_url: string | Error) {
   try {
-    if (!current_url) {
+    if (!current_url || current_url instanceof Error) {
       throw new Error('Invalid current_url')
     }
 
@@ -104,8 +108,8 @@ export async function getConstestPages(current_url: string | Error) {
 
     return totalPages
   } catch (error) {
-    console.log('Error geting toatal no. of pages', error)
-    throw new Error('Error geting toatal no. of pages')
+    console.log('Error getting total no. of pages', error)
+    throw new Error('Error getting total no. of pages')
   }
 }
 
@@ -142,9 +146,12 @@ export async function fetchPage(
   }
 }
 
-export async function fetchLeaderBoard() {
+export async function fetchLeaderBoard(contestName?: string) {
   try {
-    const current_url: string | Error = await getupdatedURL(base_url)
+    const current_url: string | Error = await getupdatedURL(
+      base_url,
+      contestName,
+    )
     const totalPages: number | Error = await getConstestPages(current_url)
 
     console.log('Current URL: ', current_url)
@@ -156,9 +163,17 @@ export async function fetchLeaderBoard() {
 
     const userdata: Participant[] = []
 
-    const contestDate = await getFirstContest().then((res) => {
-      return res?.date
-    })
+    // Get contest date - either from specific contest or from JSON file
+    let contestDate
+    if (contestName) {
+      // If specific contest, use current date or try to fetch actual contest date
+      // For simplicity, using current date here
+      contestDate = new Date().toISOString()
+    } else {
+      contestDate = await getFirstContest().then((res) => {
+        return res?.date
+      })
+    }
 
     const contestStartTime = new Date(contestDate).getTime()
 
@@ -216,103 +231,117 @@ export async function fetchLeaderBoard() {
 }
 
 //NOTE: Load the data into the DB
-export async function updateLeetcodeData() {
-  {
-    try {
-      const data = await fetchLeaderBoard()
-      const contestDetails = await getFirstContest()
+export async function updateLeetcodeData(contestSlug?: string) {
+  try {
+    // Determine contest details
+    let contestDetails
 
-      if (!contestDetails?.contest || !contestDetails?.date) {
-        console.log('Contest details missing.')
-        return
+    if (contestSlug) {
+      contestDetails = {
+        contest: contestSlug,
+        date: new Date().toISOString(),
       }
-
-      // Upsert contest details
-
-      const contest = await prisma.contest.upsert({
-        where: { name: contestDetails.contest },
-        update: {},
-        //@ts-ignore
-        create: {
-          name: contestDetails.contest,
-          date: contestDetails.date,
-          type: 'Leetcode',
-        },
-      })
-
-      // Create a Map for quick lookup (username -> entry)
-      const leaderboardMap = new Map<string, any>()
-      for (const entry of data) {
-        leaderboardMap.set(entry.username, entry)
-      }
-
-      // Fetch all students
-      const students = await prisma.students.findMany()
-
-      // Iterate over students and check if they are in the leaderboard
-      for (const student of students) {
-        const entry = leaderboardMap.get(student.leetcode_id)
-
-        if (entry) {
-          await prisma.contestParticipation.upsert({
-            where: {
-              studentId_contestId: {
-                studentId: student.id,
-                contestId: contest.id,
-              },
-            },
-            update: {
-              rank: entry.rank,
-              finishTime: entry.finish_time,
-              total_qns: entry.total_questions,
-              questions: entry.questions as any,
-            },
-            create: {
-              studentId: student.id,
-              contestId: contest.id,
-              contestName: contestDetails.contest,
-              rank: entry.rank,
-              finishTime: entry.finish_time,
-              total_qns: entry.total_questions,
-              questions: entry.questions as any,
-            },
-          })
-
-          console.log(
-            `Updated participation for student: ${student.leetcode_id}`,
-          )
-        } else {
-          await prisma.contestParticipation.upsert({
-            where: {
-              studentId_contestId: {
-                studentId: student.id,
-                contestId: contest.id,
-              },
-            },
-            update: {
-              rank: -1,
-              finishTime: null,
-              total_qns: 0,
-              questions: [] as any,
-            },
-            create: {
-              studentId: student.id,
-              contestId: contest.id,
-              contestName: contestDetails.contest,
-              rank: -1,
-              finishTime: null,
-              total_qns: 0,
-              questions: [] as any,
-            },
-          })
-
-          console.log(
-            `Marked student ${student.leetcode_id} as non-participant with rank -1`,
-          )
-        }
-      }
-    } catch (error) {
-      console.log('Error updating contest participation:', error)
+      console.log(`Processing specific contest: ${contestSlug}`)
+    } else {
+      contestDetails = await getFirstContest()
+      console.log(
+        `Processing contest from JSON file: ${contestDetails?.contest}`,
+      )
     }
+
+    if (!contestDetails?.contest || !contestDetails?.date) {
+      console.log('Contest details missing.')
+      return
+    }
+
+    const data = await fetchLeaderBoard(contestSlug)
+
+    // Upsert contest details
+    const contest = await prisma.contest.upsert({
+      where: { name: contestDetails.contest },
+      update: {},
+      //@ts-ignore
+      create: {
+        name: contestDetails.contest,
+        date: contestDetails.date,
+        type: 'Leetcode',
+      },
+    })
+
+    // Create a Map for quick lookup (username -> entry)
+    const leaderboardMap = new Map<string, any>()
+    for (const entry of data) {
+      leaderboardMap.set(entry.username, entry)
+    }
+
+    // Fetch all students
+    const students = await prisma.students.findMany()
+
+    // Iterate over students and check if they are in the leaderboard
+    for (const student of students) {
+      const entry = leaderboardMap.get(student.leetcode_id)
+
+      if (entry) {
+        await prisma.contestParticipation.upsert({
+          where: {
+            studentId_contestId: {
+              studentId: student.id,
+              contestId: contest.id,
+            },
+          },
+          update: {
+            rank: entry.rank,
+            finishTime: entry.finish_time,
+            total_qns: entry.total_questions,
+            questions: entry.questions as any,
+          },
+          create: {
+            studentId: student.id,
+            contestId: contest.id,
+            contestName: contestDetails.contest,
+            rank: entry.rank,
+            finishTime: entry.finish_time,
+            total_qns: entry.total_questions,
+            questions: entry.questions as any,
+          },
+        })
+
+        console.log(`Updated participation for student: ${student.leetcode_id}`)
+      } else {
+        await prisma.contestParticipation.upsert({
+          where: {
+            studentId_contestId: {
+              studentId: student.id,
+              contestId: contest.id,
+            },
+          },
+          update: {
+            rank: -1,
+            finishTime: null,
+            total_qns: 0,
+            questions: [] as any,
+          },
+          create: {
+            studentId: student.id,
+            contestId: contest.id,
+            contestName: contestDetails.contest,
+            rank: -1,
+            finishTime: null,
+            total_qns: 0,
+            questions: [] as any,
+          },
+        })
+
+        console.log(
+          `Marked student ${student.leetcode_id} as non-participant with rank -1`,
+        )
+      }
+    }
+
+    console.log(`Successfully processed contest: ${contestDetails.contest}`)
+    return true
+  } catch (error) {
+    console.log('Error updating contest participation:', error)
+    return false
   }
 }
