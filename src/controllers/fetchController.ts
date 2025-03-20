@@ -2,7 +2,7 @@ import schedule from 'node-schedule'
 import Queue from 'bull'
 import axios from 'axios'
 import { updateCodeforcesdata } from './codeforcesController'
-import { updateLeetcodeData, removeFirstContest } from './leetcodeController'
+import { updateLeetcodeData } from './leetcodeController'
 import { updateCodechefdata } from './codechefController'
 
 interface Contest {
@@ -12,6 +12,7 @@ interface Contest {
   duration: number
   endTime: number
   url: string
+  titleSlug?: string // Added titleSlug for leetcode contests
 }
 
 interface CodechefContest {
@@ -76,7 +77,11 @@ const queue = new Queue('ContestQueue', {
 
 async function handleLeetcodeContest(contest: Contest): Promise<void> {
   console.log(`Adding to Queue Leetcode contest: ${contest.title}`)
-  await queue.add({ type: 'Leetcode' })
+  // Pass the titleSlug to the job if available
+  await queue.add({
+    type: 'Leetcode',
+    contestSlug: contest.titleSlug,
+  })
 }
 
 async function handleCodechefContest(contest: Contest): Promise<void> {
@@ -86,7 +91,7 @@ async function handleCodechefContest(contest: Contest): Promise<void> {
 
 async function handleCodeforcesContest(contest: Contest): Promise<void> {
   console.log(`Adding to Queue Codeforces contest: ${contest.title}`)
-  await queue.add({ type: 'Codeforces' })
+  await queue.add({ type: 'Codeforces', contestName: contest.title })
 }
 
 const parseCodechef = (data: CodechefContest[]): Contest[] => {
@@ -135,6 +140,7 @@ const parseLeetcode = (data: LeetcodeContest[]): Contest[] => {
       duration,
       endTime: startTime + duration,
       url: `https://leetcode.com/contest/${item.titleSlug}`,
+      titleSlug: item.titleSlug, // Store the titleSlug for later use
     }
   })
 }
@@ -212,6 +218,17 @@ export async function fetchUpcomingContests(): Promise<Contest[]> {
       return startDate === todayIST
     })
 
+    // Check if there's a LeetCode contest today and process it immediately
+    const todayLeetcodeContest = todayContests.find(
+      (contest) => contest.site === 'leetcode',
+    )
+
+    if (todayLeetcodeContest) {
+      console.log(`Found LeetCode contest today: ${todayLeetcodeContest.title}`)
+      // Schedule immediate processing for today's LeetCode contest
+      await processContest(todayLeetcodeContest)
+    }
+
     for (const contest of todayContests) {
       scheduleContestFetch(contest)
     }
@@ -281,14 +298,13 @@ queue.process(async (job, done) => {
 
     switch (job.data.type) {
       case 'Leetcode':
-        await updateLeetcodeData()
-        await removeFirstContest()
+        await updateLeetcodeData(job.data.contestSlug)
         break
       case 'Codechef':
         await updateCodechefdata(job.data.contestName)
         break
       case 'Codeforces':
-        await updateCodeforcesdata()
+        await updateCodeforcesdata(job.data.contestName)
         break
       default:
         console.warn(`Unknown job: ${job.data.type}`)

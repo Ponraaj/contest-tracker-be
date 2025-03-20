@@ -1,6 +1,4 @@
 import prisma from '../config/db'
-import fs from 'fs/promises'
-import path from 'path'
 
 export interface Question {
   question_id: string
@@ -18,78 +16,23 @@ export interface Participant {
   questions: Question[]
 }
 
-const CONTESTS_FILE_PATH = path.join(
-  process.cwd(),
-  'src',
-  'utils',
-  'contests.json',
-)
-
-/**
- * Reads and validates contests from the JSON file.
- */
-async function readContests() {
-  try {
-    const data = await fs.readFile(CONTESTS_FILE_PATH, 'utf-8')
-    const contests = JSON.parse(data)
-    return contests
-  } catch (error) {
-    console.error('Error reading contests file:', error)
-    return []
-  }
-}
-
-/**
- * Gets the first contest from the JSON file (if available).
- */
-export async function getFirstContest() {
-  const contests = await readContests()
-  return contests.length > 0 ? contests[0] : null
-}
-
-/**
- * Removes the first contest from the JSON file.
- */
-export async function removeFirstContest() {
-  try {
-    const contests = await readContests()
-    if (contests.length === 0) {
-      console.log('No contests to remove.')
-      return
-    }
-
-    const updatedContests = contests.slice(1)
-    await fs.writeFile(
-      CONTESTS_FILE_PATH,
-      JSON.stringify(updatedContests, null, 2),
-      'utf-8',
-    )
-
-    console.log(`Removed contest: ${contests[0].contest}`)
-  } catch (error) {
-    console.error('Error removing first contest:', error)
-  }
-}
-
 export const base_url = 'https://leetcode.cn/contest/api/ranking/'
 
-//NOTE: Get updated URL
-export async function getupdatedURL(base_url: string, contestName?: string) {
+/**
+ * Gets the updated URL for the LeetCode contest API
+ */
+export async function getupdatedURL(base_url: string, contestName: string) {
   try {
-    if (contestName) {
-      return base_url + contestName
-    }
-
-    const contestInfo = await getFirstContest()
-    if (contestInfo?.contest) base_url += contestInfo.contest
-    return base_url
+    return base_url + contestName
   } catch (error) {
     console.log('Error getting the updated URL', error)
     return new Error('Error getting the updated URL')
   }
 }
 
-//NOTE: Get total no. of pages in the leaderboard
+/**
+ * Gets the total number of pages in the contest leaderboard
+ */
 export async function getConstestPages(current_url: string | Error) {
   try {
     if (!current_url || current_url instanceof Error) {
@@ -113,7 +56,9 @@ export async function getConstestPages(current_url: string | Error) {
   }
 }
 
-//NOTE: Get the data from single page
+/**
+ * Fetches a single page of the contest leaderboard
+ */
 export async function fetchPage(
   pageIndex: number,
   current_url: string | Error,
@@ -128,9 +73,6 @@ export async function fetchPage(
         Accept: 'application/json',
       },
     })
-    // if (!response.ok) {
-    //   throw new Error(`HTTP error! Status: ${response.status}`);
-    // }
     const data = await response.json()
     console.log(`Completed fetching data for page ${pageIndex}`)
     return data
@@ -146,7 +88,13 @@ export async function fetchPage(
   }
 }
 
-export async function fetchLeaderBoard(contestName?: string) {
+/**
+ * Fetches the complete leaderboard for a contest
+ */
+export async function fetchLeaderBoard(
+  contestName: string,
+  contestDate: string,
+) {
   try {
     const current_url: string | Error = await getupdatedURL(
       base_url,
@@ -162,19 +110,6 @@ export async function fetchLeaderBoard(contestName?: string) {
       )
 
     const userdata: Participant[] = []
-
-    // Get contest date - either from specific contest or from JSON file
-    let contestDate
-    if (contestName) {
-      // If specific contest, use current date or try to fetch actual contest date
-      // For simplicity, using current date here
-      contestDate = new Date().toISOString()
-    } else {
-      contestDate = await getFirstContest().then((res) => {
-        return res?.date
-      })
-    }
-
     const contestStartTime = new Date(contestDate).getTime()
 
     for (let i = 1; i <= totalPages; i++) {
@@ -230,40 +165,32 @@ export async function fetchLeaderBoard(contestName?: string) {
   }
 }
 
-//NOTE: Load the data into the DB
-export async function updateLeetcodeData(contestSlug?: string) {
+/**
+ * Updates the database with LeetCode contest data
+ * @param contestSlug The slug of the contest to update
+ */
+export async function updateLeetcodeData(contestSlug: string) {
   try {
-    // Determine contest details
-    let contestDetails
-
-    if (contestSlug) {
-      contestDetails = {
-        contest: contestSlug,
-        date: new Date().toISOString(),
-      }
-      console.log(`Processing specific contest: ${contestSlug}`)
-    } else {
-      contestDetails = await getFirstContest()
-      console.log(
-        `Processing contest from JSON file: ${contestDetails?.contest}`,
-      )
+    if (!contestSlug) {
+      console.log('Contest slug is required.')
+      return false
     }
 
-    if (!contestDetails?.contest || !contestDetails?.date) {
-      console.log('Contest details missing.')
-      return
-    }
+    console.log(`Processing contest: ${contestSlug}`)
 
-    const data = await fetchLeaderBoard(contestSlug)
+    // Use current date for the contest
+    const contestDate = new Date().toISOString()
+
+    // Fetch leaderboard data using the contest slug
+    const data = await fetchLeaderBoard(contestSlug, contestDate)
 
     // Upsert contest details
     const contest = await prisma.contest.upsert({
-      where: { name: contestDetails.contest },
+      where: { name: contestSlug },
       update: {},
-      //@ts-ignore
       create: {
-        name: contestDetails.contest,
-        date: contestDetails.date,
+        name: contestSlug,
+        date: contestDate,
         type: 'Leetcode',
       },
     })
@@ -298,7 +225,7 @@ export async function updateLeetcodeData(contestSlug?: string) {
           create: {
             studentId: student.id,
             contestId: contest.id,
-            contestName: contestDetails.contest,
+            contestName: contestSlug,
             rank: entry.rank,
             finishTime: entry.finish_time,
             total_qns: entry.total_questions,
@@ -324,7 +251,7 @@ export async function updateLeetcodeData(contestSlug?: string) {
           create: {
             studentId: student.id,
             contestId: contest.id,
-            contestName: contestDetails.contest,
+            contestName: contestSlug,
             rank: -1,
             finishTime: null,
             total_qns: 0,
@@ -338,7 +265,7 @@ export async function updateLeetcodeData(contestSlug?: string) {
       }
     }
 
-    console.log(`Successfully processed contest: ${contestDetails.contest}`)
+    console.log(`Successfully processed contest: ${contestSlug}`)
     return true
   } catch (error) {
     console.log('Error updating contest participation:', error)
