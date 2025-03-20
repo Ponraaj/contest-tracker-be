@@ -81,7 +81,7 @@ async function handleLeetcodeContest(contest: Contest): Promise<void> {
 
 async function handleCodechefContest(contest: Contest): Promise<void> {
   console.log(`Adding to Queue Codechef contest: ${contest.title}`)
-  await queue.add({ type: 'Codechef' })
+  await queue.add({ type: 'Codechef', contestName: contest.title })
 }
 
 async function handleCodeforcesContest(contest: Contest): Promise<void> {
@@ -285,7 +285,7 @@ queue.process(async (job, done) => {
         await removeFirstContest()
         break
       case 'Codechef':
-        await updateCodechefdata()
+        await updateCodechefdata(job.data.contestName)
         break
       case 'Codeforces':
         await updateCodeforcesdata()
